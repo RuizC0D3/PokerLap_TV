@@ -1,0 +1,130 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: "fichas";
+  src: url("/fonts/rocas.ttf");
+}
+@font-face {
+  font-family: "titulo";
+  src: url("/fonts/bebas.ttf");
+}
+@font-face {
+  font-family: "letras";
+  src: url("/fonts/din.ttf");
+}
+
+:root {
+  --color-mesa: #1a1a2e;
+  --color-linea: #ffffff;
+  --color-cambio: #00ff88;
+  --color-fondo: #000000;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: #000;
+  font-family: "letras", sans-serif;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.bg-mesa {
+  background: radial-gradient(circle at 20% 20%, #0f6b6f 0, #002229 45%, #000 100%);
+}
+
+.border-linea {
+  border-color: #24c3ff;
+}
+
+.font-fichas {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.font-titulo {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+/* Fondo tipo mesa */
+.tv-mesa {
+  background: radial-gradient(circle at 20% 20%, #0f6b6f 0, #002229 45%, #000 100%);
+}
+
+.tv-reloj-texto {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 80px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.tv-card-blanca {
+  background-color: #ffffff;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tv-card-columna {
+  flex-direction: column;
+}
+
+.tv-nivel-titulo {
+  font-weight: 700;
+  font-size: 24px;
+  color: #c1121f;
+}
+
+.tv-nivel-numero {
+  font-weight: 700;
+  font-size: 56px;
+  color: #000000;
+}
+
+.tv-logo-texto {
+  font-weight: 600;
+  font-size: 24px;
+  color: #000000;
+}
+
+.tv-card-blanca {
+  background-color: #ffffff;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tv-card-columna {
+  flex-direction: column;
+}
+
+.tv-nivel-titulo {
+  font-weight: 700;
+  font-size: 24px;
+  color: #c1121f;
+}
+
+.tv-nivel-numero {
+  font-weight: 700;
+  font-size: 32px;
+  color: #000000;
+}
+
+.tv-logo-texto {
+  font-weight: 500;
+  font-size: 18px;
+  color: #000000;
+}
