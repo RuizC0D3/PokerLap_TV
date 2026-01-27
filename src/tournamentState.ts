@@ -1,41 +1,52 @@
 // src/tournamentState.ts
 
+export type TournamentPrize = {
+  position: number;
+  amount: number;
+};
+
 export type TournamentState = {
+  tournamentName: string;
+
   level: number;
   sb: number;
   bb: number;
   ante: number;
   levelMinutes: number;
+
   estado: number;
   horaEstadoMs: number;
   segNivel: number;
   hDifMs: number;
+
   nextLevelSb: number;
   nextLevelBb: number;
   nextLevelAnte: number;
+
   playersTotal: number;
   playersRemaining: number;
   reentries: number;
   addons: number;
   avgStack: number;
+
   nextBreakSeconds: number;
   endRegisterSeconds: number;
   endRebuySeconds: number;
   endAddonSeconds: number;
+
+  prizes: TournamentPrize[];
 };
 
+// --- tiempo ---
 
 export function calcLegacyTimeLeft(
   t: TournamentState,
   ahoraMs: number
 ): number {
   const totalSeconds = t.levelMinutes * 60;
-
   const dHoy = ahoraMs;
-
   const offset = Math.floor((t.horaEstadoMs - dHoy) / 1000);
   const tfalta = totalSeconds - t.segNivel + offset;
-
   return tfalta > 0 ? tfalta : 0;
 }
 
@@ -57,6 +68,8 @@ export function recalcTimeLeftFromEstado(t: TournamentState): number {
   return tfalta > 0 ? tfalta : 0;
 }
 
+// --- payloads de WS ---
+
 export type EstadoPayload = {
   Nivel: number;
   Estado: number;
@@ -64,7 +77,10 @@ export type EstadoPayload = {
   SegNivel: number;
 };
 
-export function applyEstado(prev: TournamentState, dat: EstadoPayload): TournamentState {
+export function applyEstado(
+  prev: TournamentState,
+  dat: EstadoPayload
+): TournamentState {
   const hora = new Date(dat.HoraEstado).getTime();
 
   const nuevo: TournamentState = {
@@ -77,3 +93,4 @@ export function applyEstado(prev: TournamentState, dat: EstadoPayload): Tourname
 
   return nuevo;
 }
+

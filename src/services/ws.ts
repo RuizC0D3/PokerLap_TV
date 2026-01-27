@@ -38,24 +38,31 @@ function calcEndByNivel(
 
 function calcNextBreakSeconds(
   estructura: any[],
-  desdeIdx: number,
+  idxBlinds: number,
   horaEstadoMs: number,
-  segNivel: number
+  segNivel: number,
+  hDif: number
 ): number {
   if (!estructura.length) return 0;
 
-  let iProx = desdeIdx;
-  let nDesc =
-    horaEstadoMs + (estructura[desdeIdx].m * 60 - segNivel) * 1000;
+  const current = estructura[idxBlinds];
+  if (!current) return 0;
 
-  while (estructura[iProx] && estructura[iProx].t !== 0) {
-    nDesc += estructura[iProx].m * 60000;
-    iProx++;
-    if (iProx >= estructura.length) break;
+  const dHoy = Date.now() + hDif;
+
+  let millisHastaBreak =
+    horaEstadoMs + (current.m * 60 - segNivel) * 1000;
+
+  let i = idxBlinds + 1;
+  while (i < estructura.length) {
+    const lvl = estructura[i];
+    millisHastaBreak += lvl.m * 60_000;
+    if (lvl.t === 0) break;
+    i++;
   }
 
-  const dHoy = Date.now();
-  return Math.max(Math.floor((nDesc - dHoy) / 1000), 0);
+  const diffSeconds = Math.floor((millisHastaBreak - dHoy) / 1000);
+  return Math.max(diffSeconds, 0);
 }
 
 
@@ -86,12 +93,60 @@ export function createTvSocket(handlers: TvHandlers) {
           break;
         }
 
+        case 'Premios': {
+          const raw = typeof msg.Datos === 'string'
+            ? JSON.parse(msg.Datos)
+            : msg.Datos;
+
+          const lista = raw.Premios ?? raw ?? [];
+
+          handlers.onEstado((prev) => {
+            const base: TournamentState = prev ?? {
+              tournamentName: '',
+              level: 1,
+              sb: 0,
+              bb: 0,
+              ante: 0,
+              levelMinutes: 0,
+              estado: 0,
+              horaEstadoMs: Date.now(),
+              segNivel: 0,
+              hDifMs: 0,
+              nextLevelSb: 0,
+              nextLevelBb: 0,
+              nextLevelAnte: 0,
+              nextBreakSeconds: 0,
+              endRegisterSeconds: 0,
+              endRebuySeconds: 0,
+              endAddonSeconds: 0,
+              playersTotal: 0,
+              playersRemaining: 0,
+              reentries: 0,
+              addons: 0,
+              avgStack: 0,
+              prizes: [],
+            };
+
+            const prizes = (lista as any[])
+              .map((p, idx) => ({
+                position: Number(p.p ?? p.pos ?? idx + 1),
+                amount: Number(p.v ?? p.valor ?? 0),
+              }))
+              .filter((p) => p.amount > 0);
+            return {
+              ...base,
+              prizes,
+            };
+          });
+
+          break;
+        }
+
         case 'Torneo': {
             const raw = typeof msg.Datos === 'string' ? JSON.parse(msg.Datos) : msg.Datos;
 
             console.log('TORNEO RAW DEBUG', { /* ... */ });
 
-            // hora del server
             const serverNowMs = new Date(String(raw.Hora ?? new Date().toISOString())).getTime();
             const clientNowMs = Date.now();
             const hDif = serverNowMs - clientNowMs;
@@ -134,30 +189,31 @@ export function createTvSocket(handlers: TvHandlers) {
 
             onEstado((prev) => {
                 const base: TournamentState = prev ?? {
-                    level: 1,
-                    sb: 0,
-                    bb: 0,
-                    ante: 0,
-                    levelMinutes: 0,
-                    estado: 0,
-                    horaEstadoMs: Date.now(),
-                    segNivel: 0,
-                    hDifMs: 0,
-                    nextLevelSb: 0,
-                    nextLevelBb: 0,
-                    nextLevelAnte: 0,
-                    playersTotal: 0,
-                    playersRemaining: 0,
-                    reentries: 0,
-                    addons: 0,
-                    avgStack: 0,
-                    nextBreakSeconds: 0,
-                    endRegisterSeconds: 0,
-                    endRebuySeconds: 0,
-                    endAddonSeconds: 0,
+                  tournamentName: '',
+                  level: 1,
+                  sb: 0,
+                  bb: 0,
+                  ante: 0,
+                  levelMinutes: 0,
+                  estado: 0,
+                  horaEstadoMs: Date.now(),
+                  segNivel: 0,
+                  hDifMs: 0,
+                  nextLevelSb: 0,
+                  nextLevelBb: 0,
+                  nextLevelAnte: 0,
+                  nextBreakSeconds: 0,
+                  endRegisterSeconds: 0,
+                  endRebuySeconds: 0,
+                  endAddonSeconds: 0,
+                  playersTotal: 0,
+                  playersRemaining: 0,
+                  reentries: 0,
+                  addons: 0,
+                  avgStack: 0,
+                  prizes: [],
                 };
 
-                // 👇 calcula aquí los nuevos tiempos
                 const endRegisterSeconds =
                     Number(raw.RegNivel ?? 0) > 0
                     ? calcEndByNivel(
@@ -192,39 +248,51 @@ export function createTvSocket(handlers: TvHandlers) {
                     : 0;
 
                 const nextBreakSeconds = calcNextBreakSeconds(
-                    estructura,
-                    idx,
-                    horaEstadoMs,
-                    segNivel
+                  estructura,
+                  idx,
+                  horaEstadoMs,
+                  segNivel,
+                  hDif
                 );
 
+                console.log('DEBUG BREAK', {
+                  idx,
+                  segNivel,
+                  horaEstadoMs,
+                  now: Date.now() + hDif,
+                  nextBreakSeconds,
+                  tramo: estructura.slice(idx, idx + 5),
+                });
+
                 const nuevo: TournamentState = {
-                    ...base,
-                    ...payload,
-                    level: nivelVisible,
-                    sb: est?.s ?? base.sb,
-                    bb: est?.b ?? base.bb,
-                    ante: est?.a ?? base.ante,
-                    levelMinutes: est?.m ?? base.levelMinutes,
-                    estado: datEst.Estado,
-                    horaEstadoMs,
-                    segNivel,
-                    hDifMs: hDif,
-                    nextLevelSb: nextEst?.s ?? base.nextLevelSb,
-                    nextLevelBb: nextEst?.b ?? base.nextLevelBb,
-                    nextLevelAnte: nextEst?.a ?? base.nextLevelAnte,
-                    playersTotal: raw.Cantidades?.Jugadores ?? base.playersTotal,
-                    playersRemaining: raw.Cantidades?.Quedan ?? base.playersRemaining,
-                    reentries: raw.Cantidades?.Reentradas ?? base.reentries,
-                    addons: raw.Cantidades?.Adiciones ?? base.addons,
-                    avgStack:
+                  ...base,
+                  ...payload,
+                  tournamentName: raw.Nombre ?? base.tournamentName,
+                  level: nivelVisible,
+                  sb: est?.s ?? base.sb,
+                  bb: est?.b ?? base.bb,
+                  ante: est?.a ?? base.ante,
+                  levelMinutes: est?.m ?? base.levelMinutes,
+                  estado: datEst.Estado,
+                  horaEstadoMs,
+                  segNivel,
+                  hDifMs: hDif,
+                  nextLevelSb: nextEst?.s ?? base.nextLevelSb,
+                  nextLevelBb: nextEst?.b ?? base.nextLevelBb,
+                  nextLevelAnte: nextEst?.a ?? base.nextLevelAnte,
+                  playersTotal: raw.Cantidades?.Jugadores ?? base.playersTotal,
+                  playersRemaining: raw.Cantidades?.Quedan ?? base.playersRemaining,
+                  reentries: raw.Cantidades?.Reentradas ?? base.reentries,
+                  addons: raw.Cantidades?.Adiciones ?? base.addons,
+                  avgStack:
                     raw.Cantidades?.Fichas && raw.Cantidades?.Quedan
-                        ? Math.round(raw.Cantidades.Fichas / raw.Cantidades.Quedan)
-                        : base.avgStack,
-                    nextBreakSeconds,
-                    endRegisterSeconds,
-                    endRebuySeconds,
-                    endAddonSeconds,
+                      ? Math.round(raw.Cantidades.Fichas / raw.Cantidades.Quedan)
+                      : base.avgStack,
+                  nextBreakSeconds,
+                  endRegisterSeconds,
+                  endRebuySeconds,
+                  endAddonSeconds,
+                  prizes: base.prizes,
                 };
 
                 return nuevo;
