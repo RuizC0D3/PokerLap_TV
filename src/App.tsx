@@ -12,6 +12,24 @@ const THEME = {
   border: 'rgba(148,163,184,0.5)',
 };
 
+const THEMES = {
+  deepBlue: {
+    name: 'Deep Blue',
+    bgGradient:
+      'radial-gradient(circle at top, #0f172a 0, #020617 55%, #000 100%)',
+    cardBg: 'rgba(15,23,42,0.96)',
+    accent: '#0ea5e9',
+  },
+  burgundy: {
+    name: 'Burgundy',
+    bgGradient:
+      'radial-gradient(circle at top, #3b0210 0, #0b0210 55%, #000 100%)',
+    cardBg: 'rgba(24,10,20,0.96)',
+    accent: '#f97316',
+  },
+};
+
+
 function Card({
   children,
   bg = THEME.cardMain,
@@ -19,12 +37,13 @@ function Card({
   children: React.ReactNode;
   bg?: string;
 }) {
+  const defaultBg = THEMES.deepBlue.cardBg;
   return (
     <div
       style={{
         width: '100%',
         height: '100%',
-        background: bg,
+        background: bg ?? defaultBg,
         borderRadius: '14px',
         border: `1px solid ${THEME.border}`,
         boxShadow: '0 18px 40px rgba(15,23,42,0.8)',
@@ -313,6 +332,8 @@ function QrWidget({ idTv }: { idTv: number }) {
 }
 
 function App() {
+  const [themeKey, setThemeKey] = useState<keyof typeof THEMES>('deepBlue');
+  const theme = THEMES[themeKey];
   const [dimensions, setDimensions] = useState({
     width: window.innerWidth,
     height: window.innerHeight,
@@ -339,7 +360,19 @@ function App() {
     h: number;
   };
 
-  const isEditMode = window.location.search.includes('edit=1');
+  const [isEditMode, setIsEditMode] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Ctrl+E para togglear edición
+      if (e.key.toLowerCase() === 'e' && e.ctrlKey) {
+        e.preventDefault();
+        setIsEditMode((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   const gridOverlay = isEditMode ? (
     <div
@@ -367,10 +400,100 @@ function App() {
     { id: 'payouts', x: 21, y: 10, w: 10, h: 4 },
   ]);
 
+  function clamp(value: number, min: number, max: number) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function rectanglesOverlap(a: WidgetConfig, b: WidgetConfig) {
+    return !(
+      a.x + a.w <= b.x ||
+      b.x + b.w <= a.x ||
+      a.y + a.h <= b.y ||
+      b.y + b.h <= a.y
+    );
+  }
+
+  function placeWidgetWithCollision(
+    prev: WidgetConfig[],
+    movingId: WidgetConfig['id'],
+    gx: number,
+    gy: number,
+    cols: number,
+    rows: number
+  ): WidgetConfig[] {
+    const current = prev.find((w) => w.id === movingId);
+    if (!current) return prev;
+
+    const others = prev.filter((w) => w.id !== movingId);
+
+    // posición propuesta dentro de la grilla
+    const targetX = clamp(gx, 0, cols - current.w);
+    const targetY = clamp(gy, 0, rows - current.h);
+
+    const candidateAtTarget: WidgetConfig = {
+      ...current,
+      x: targetX,
+      y: targetY,
+    };
+
+    if (!others.some((o) => rectanglesOverlap(candidateAtTarget, o))) {
+      return prev.map((w) => (w.id === movingId ? candidateAtTarget : w));
+    }
+
+    // buscar TODOS los huecos posibles y quedarnos con el más cercano a (targetX, targetY)
+    const freeSpots: { x: number; y: number; dist: number }[] = [];
+
+    for (let y = 0; y <= rows - current.h; y++) {
+      for (let x = 0; x <= cols - current.w; x++) {
+        const candidate: WidgetConfig = { ...current, x, y };
+        if (!others.some((o) => rectanglesOverlap(candidate, o))) {
+          const dx = x - targetX;
+          const dy = y - targetY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          freeSpots.push({ x, y, dist });
+        }
+      }
+    }
+
+    if (freeSpots.length === 0) {
+      // no hay hueco: cancelamos movimiento
+      return prev;
+    }
+
+    // hueco más cercano al punto donde soltaste
+    freeSpots.sort((a, b) => a.dist - b.dist);
+    const bestSpot = freeSpots[0];
+
+    const best: WidgetConfig = {
+      ...current,
+      x: bestSpot.x,
+      y: bestSpot.y,
+    };
+
+    const next = prev.map((w) => (w.id === movingId ? best : w));
+
+    // clamp de seguridad
+    return next.map((w) => ({
+      ...w,
+      x: clamp(w.x, 0, cols - w.w),
+      y: clamp(w.y, 0, rows - w.h),
+    }));
+  }
+
+
+
   const [hoverCell, setHoverCell] = useState<{ x: number; y: number } | null>(
     null
   );
   const [draggingId, setDraggingId] = useState<WidgetConfig['id'] | null>(null);
+
+  const [resizingId, setResizingId] = useState<WidgetConfig['id'] | null>(null);
+  const [resizeStart, setResizeStart] = useState<{
+    mouseX: number;
+    mouseY: number;
+    w: number;
+    h: number;
+  } | null>(null);
 
   useEffect(() => {
     const handleResize = () => {
@@ -382,6 +505,46 @@ function App() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+  if (!isEditMode || !resizingId || !resizeStart) return;
+
+  const handleMove = (e: MouseEvent) => {
+    const dx = e.clientX - resizeStart.mouseX;
+    const dy = e.clientY - resizeStart.mouseY;
+
+    const deltaCols = Math.round(dx / cellWidth);
+    const deltaRows = Math.round(dy / cellHeight);
+
+    const newW = clamp(resizeStart.w + deltaCols, 2, cols); // mínimo 2 celdas
+    const newH = clamp(resizeStart.h + deltaRows, 2, rows);
+
+    setLayout((prev) =>
+      prev.map((w) =>
+        w.id === resizingId
+          ? {
+              ...w,
+              w: clamp(newW, 1, cols - w.x),
+              h: clamp(newH, 1, rows - w.y),
+            }
+          : w
+      )
+    );
+  };
+
+  const handleUp = () => {
+    setResizingId(null);
+    setResizeStart(null);
+  };
+
+  window.addEventListener('mousemove', handleMove);
+  window.addEventListener('mouseup', handleUp);
+  return () => {
+    window.removeEventListener('mousemove', handleMove);
+    window.removeEventListener('mouseup', handleUp);
+  };
+}, [isEditMode, resizingId, resizeStart, cellWidth, cellHeight, cols, rows]);
+
 
   useEffect(() => {
     const ws = createTvSocket({
@@ -466,8 +629,6 @@ function App() {
     );
   }
 
-  
-
   const widgetRender: Record<WidgetConfig['id'], JSX.Element> = {
     club:    <ClubWidget />,
     torneo:  <TournamentInfoWidget t={tournament} />,
@@ -478,14 +639,12 @@ function App() {
     payouts: <PayoutsWidget t={tournament} />,
   };
 
-
   return (
     <div
       style={{
         width: '100vw',
         height: '100vh',
-        background:
-          'radial-gradient(circle at top, #0f172a 0, #020617 55%, #000 100%)',
+        background: theme.bgGradient,
         overflow: 'hidden',
         margin: 0,
         padding: 0,
@@ -495,25 +654,38 @@ function App() {
         if (!isEditMode || !draggingId) return;
         e.preventDefault();
         const rect = e.currentTarget.getBoundingClientRect();
+        const moving = layout.find((w) => w.id === draggingId);
+        if (!moving) return;
+
         const cx = e.clientX - rect.left;
         const cy = e.clientY - rect.top;
-        const gx = Math.floor(cx / cellWidth);
-        const gy = Math.floor(cy / cellHeight);
+
+        const originX = cx - (moving.w * cellWidth) / 2;
+        const originY = cy - (moving.h * cellHeight) / 2;
+
+        const gx = Math.round(originX / cellWidth);
+        const gy = Math.round(originY / cellHeight);
+
         setHoverCell({ x: gx, y: gy });
       }}
       onDrop={(e) => {
         if (!isEditMode || !draggingId) return;
         e.preventDefault();
         const rect = e.currentTarget.getBoundingClientRect();
+        const moving = layout.find((w) => w.id === draggingId);
+        if (!moving) return;
+
         const cx = e.clientX - rect.left;
         const cy = e.clientY - rect.top;
-        const gx = Math.floor(cx / cellWidth);
-        const gy = Math.floor(cy / cellHeight);
+
+        const originX = cx - (moving.w * cellWidth) / 2;
+        const originY = cy - (moving.h * cellHeight) / 2;
+
+        const gx = Math.round(originX / cellWidth);
+        const gy = Math.round(originY / cellHeight);
 
         setLayout((prev) =>
-          prev.map((item) =>
-            item.id === draggingId ? { ...item, x: gx, y: gy } : item
-          )
+          placeWidgetWithCollision(prev, draggingId, gx, gy, cols, rows)
         );
         setHoverCell(null);
         setDraggingId(null);
@@ -523,44 +695,69 @@ function App() {
         <div
           style={{
             position: 'absolute',
-            inset: 0,
-            pointerEvents: 'none',
-            backgroundImage: `
-              linear-gradient(to right, rgba(148,163,184,0.12) 1px, transparent 1px),
-              linear-gradient(to bottom, rgba(148,163,184,0.12) 1px, transparent 1px)
-            `,
-            backgroundSize: `${cellWidth}px ${cellHeight}px`,
-            zIndex: 0,
+            top: 10,
+            right: 10,
+            zIndex: 3,
+            padding: '6px 10px',
+            borderRadius: 999,
+            background: 'rgba(15,23,42,0.9)',
+            border: '1px solid rgba(148,163,184,0.6)',
+            color: 'white',
+            fontSize: 12,
+            display: 'flex',
+            gap: 8,
+            alignItems: 'center',
           }}
-        />
+        >
+          <span style={{ opacity: 0.8 }}>Theme:</span>
+          {Object.entries(THEMES).map(([key, value]) => (
+            <button
+              key={key}
+              onClick={() => setThemeKey(key as keyof typeof THEMES)}
+              style={{
+                borderRadius: 999,
+                border:
+                  themeKey === key
+                    ? '1px solid white'
+                    : '1px solid rgba(148,163,184,0.6)',
+                background:
+                  themeKey === key ? value.accent : 'rgba(15,23,42,0.9)',
+                color: 'white',
+                padding: '2px 8px',
+                cursor: 'pointer',
+                fontSize: 11,
+              }}
+            >
+              {value.name}
+            </button>
+          ))}
+        </div>
       )}
 
-      {isEditMode && hoverCell && draggingId && (
-        (() => {
-          const cfg = layout.find((w) => w.id === draggingId)!;
-          return (
-            <div
-              style={{
-                position: 'absolute',
-                left: `${hoverCell.x * cellWidth}px`,
-                top: `${hoverCell.y * cellHeight}px`,
-                width: `${cfg.w * cellWidth}px`,
-                height: `${cfg.h * cellHeight}px`,
-                borderRadius: '10px',
-                border: '2px dashed rgba(251,191,36,0.9)',
-                background: 'rgba(251,191,36,0.08)',
-                pointerEvents: 'none',
-                zIndex: 1,
-              }}
-            />
-          );
-        })()
-      )}
+      {isEditMode && hoverCell && draggingId && (() => {
+        const cfg = layout.find((w) => w.id === draggingId)!;
+        return (
+          <div
+            style={{
+              position: 'absolute',
+              left: `${hoverCell.x * cellWidth}px`,
+              top: `${hoverCell.y * cellHeight}px`,
+              width: `${cfg.w * cellWidth}px`,
+              height: `${cfg.h * cellHeight}px`,
+              borderRadius: '10px',
+              border: '2px dashed rgba(251,191,36,0.9)',
+              background: 'rgba(251,191,36,0.08)',
+              pointerEvents: 'none',
+              zIndex: 1,
+            }}
+          />
+        );
+      })()}
 
       {layout.map((w) => (
         <div
           key={w.id}
-          draggable={isEditMode}
+          draggable={isEditMode && !resizingId}
           onDragStart={(e) => {
             if (!isEditMode) return;
             e.dataTransfer.setData('text/plain', w.id);
@@ -583,10 +780,39 @@ function App() {
           }}
         >
           {widgetRender[w.id]}
+
+          {isEditMode && (
+            <div
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                setResizingId(w.id);
+                setResizeStart({
+                  mouseX: e.clientX,
+                  mouseY: e.clientY,
+                  w: w.w,
+                  h: w.h,
+                });
+              }}
+              style={{
+                position: 'absolute',
+                right: 4,
+                bottom: 4,
+                width: 14,
+                height: 14,
+                borderRadius: 4,
+                background: 'rgba(148,163,184,0.9)',
+                border: '1px solid rgba(15,23,42,0.9)',
+                cursor: 'nwse-resize',
+                zIndex: 3,
+              }}
+            />
+          )}
         </div>
       ))}
     </div>
   );
+
 }
 
 export default App;
