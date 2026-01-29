@@ -1,7 +1,34 @@
-export function ClubWidget() {
+import type { Theme, UiSettings } from '../common/Card';
+import { Card } from '../common/Card';
+
+type Props = {
+  theme: Theme;
+  ui: UiSettings;
+};
+
+export function ClubWidget({ theme, ui }: Props) {
   return (
-    <div className="w-full h-full tv-card-blanca">
-      <span className="tv-logo-texto">LOGO CLUB</span>
-    </div>
+    <Card theme={theme} ui={ui}>
+      <div style={{ textAlign: 'center', width: '100%' }}>
+        <div
+          style={{
+            fontSize: `${12 * ui.fontScale}px`,
+            opacity: 0.7,
+            marginBottom: '0.5rem',
+          }}
+        >
+          Club
+        </div>
+        <div
+          style={{
+            fontSize: `${24 * ui.fontScale}px`,
+            fontWeight: 600,
+            color: theme.accent,
+          }}
+        >
+          PokerLap
+        </div>
+      </div>
+    </Card>
   );
 }

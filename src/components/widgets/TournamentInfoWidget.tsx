@@ -1,9 +1,39 @@
-export function TournamentInfoWidget() {
+import type { Theme, UiSettings } from '../common/Card';
+import { Card } from '../common/Card';
+import type { TournamentState } from '../../tournamentState';
+
+type Props = {
+  t: TournamentState;
+  theme: Theme;
+  ui: UiSettings;
+};
+
+export function TournamentInfoWidget({ t, theme, ui }: Props) {
   return (
-    <div className="w-full h-full tv-card-blanca tv-card-columna">
-      <span className="tv-logo-texto">CLUB / TORNEO</span>
-      <span className="tv-logo-texto" style={{ fontSize: 20 }}>Buy-in 150K + 50K</span>
-      <span className="tv-logo-texto" style={{ fontSize: 18 }}>Inicio 7:00 PM</span>
-    </div>
+    <Card theme={theme} ui={ui}>
+      <div style={{ textAlign: 'center', width: '100%' }}>
+        <div
+          style={{
+            fontSize: `${10 * ui.fontScale}px`,
+            opacity: 0.6,
+            marginBottom: '0.25rem',
+          }}
+        >
+          Tournament
+        </div>
+        <div
+          style={{
+            fontSize: `${16 * ui.fontScale}px`,
+            fontWeight: 600,
+            color: theme.textColor,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {t.tournamentName || 'Loading...'}
+        </div>
+      </div>
+    </Card>
   );
 }
